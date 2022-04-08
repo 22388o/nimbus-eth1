@@ -169,16 +169,19 @@ proc verifyTokenHS256(token: string; key: JwtSharedKey): Result[void,JwtError] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fromHex*(key: var JwtSharedkey, src: string): Result[void,JwtError] =
+proc fromHex*(key: var JwtSharedKey, src: string): Result[void,JwtError] =
   ## Parse argument `src` from hex-string and fill it into the argument `key`.
   ## This function is supposed to read and convert data in constant-time
   ## fashion, guarding against side channel attacks.
   # utils.fromHex() does the constant-time job
-  let secret = utils.fromHex(src)
-  if secret.len < jwtMinSecretLen:
-    return err(jwtKeyTooSmall)
-  key = toArray(JwtSharedKeyRaw.len, secret).JwtSharedKey
-  ok()
+  try:
+    let secret = utils.fromHex(src)
+    if secret.len < jwtMinSecretLen:
+      return err(jwtKeyTooSmall)
+    key = toArray(JwtSharedKeyRaw.len, secret).JwtSharedKey
+    ok()
+  except:
+    err(jwtKeyInvalidHexString)
 
 proc jwtGenSecret*(rng: ref BrHmacDrbgContext): JwtGenSecret =
   ## Standard shared key random generator. If a fixed key is needed, a
@@ -242,7 +245,7 @@ proc jwtSharedSecret*(rndSecret: JwtGenSecret; config: NimbusConf):
     let lines = config.jwtSecret.get.string.readLines(1)
     if lines.len == 0:
       return err(jwtKeyEmptyFile)
-    var key: JwtSharedkey
+    var key: JwtSharedKey
     let rc = key.fromHex(lines[0])
     if rc.isErr:
       return err(rc.error)

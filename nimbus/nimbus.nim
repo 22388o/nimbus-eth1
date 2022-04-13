@@ -56,6 +56,8 @@ type
     ctx: EthContext
     chainRef: Chain
     txPool: TxPoolRef
+    syncLoop: Future[SyncStatus]
+    networkLoop: Future[void]
 
 proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
   if string(conf.blocksFile).len > 0:
@@ -140,7 +142,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Start Eth node
   if conf.maxPeers > 0:
-    waitFor nimbus.ethNode.connectToNetwork(
+    nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
       enableDiscovery = conf.discovery != DiscoveryType.None)
 
 proc localServices(nimbus: NimbusNode, conf: NimbusConf,
@@ -315,11 +317,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, chainDB, protocols)
     localServices(nimbus, conf, chainDB, protocols)
 
-    if ProtocolFlag.Eth in protocols:
-      # TODO: temp code until the CLI/RPC interface is fleshed out
-      let status = waitFor nimbus.ethNode.fastBlockchainSync()
-      if status != syncSuccess:
-        debug "Block sync failed: ", status
+    if ProtocolFlag.Eth in protocols and conf.maxPeers > 0:
+      nimbus.syncLoop = nimbus.ethNode.fastBlockchainSync()
 
     if nimbus.state == Starting:
       # it might have been set to "Stopping" with Ctrl+C
